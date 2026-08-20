@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CommandSync | Live Tactical EOC</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #0b1120; color: #f8fafc; overflow: hidden; }
+    
+    #sidebar {
+      width: 360px;
+      background-color: #0f172a;
+      border-right: 1px solid #1e293b;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .badge-live { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+    
+    h1 { font-size: 19px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; }
+    p.subtitle { font-size: 12px; color: #94a3b8; margin-top: -6px; }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+    }
+    .card-title { font-weight: bold; margin-bottom: 6px; color: #e2e8f0; }
+
+    .custom-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 0 12px rgba(0,0,0,0.6);
+    }
+    
+    #map { flex: 1; height: 100%; }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div>
+      <h1>CommandSync <span class="badge badge-live">● LIVE EOC</span></h1>
+      <p class="subtitle">Disaster Multi-Agency Coordination</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📡 Live Responder Telemetry</div>
+      <div id="unit-status" style="color: #94a3b8;">Waiting for field unit...</div>
+      <div id="unit-coords" style="font-family: monospace; color: #38bdf8; margin-top: 4px; font-size: 12px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🚨 Active Distress Incident</div>
+      <div style="color: #ef4444; font-weight: bold;">SOS #402: 12 Trapped</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Sector 4 Lowlands (Water Level: 3.8ft)</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚡ Dynamic Routing Status</div>
+      <div id="routing-status" style="color: #4ade80; font-size: 12px;">
+        ✔ Dynamic Hazard Engine: Active (Avoiding Flood Polygon)
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    const socket = io();
+
+    // 1. Initialize Map
+    const map = L.map('map').setView([19.0782, 73.0915], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+    function createPin(color, label) {
+      return L.divIcon({
+        className: 'custom-icon',
+        html: `<div style="background-color:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${label}</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+    }
+
+    // 2. Define SOS Marker
+    const sosCoords = [19.0850, 73.1020];
+    const sosMarker = L.marker(sosCoords, { icon: createPin('#ef4444', 'SOS') })
+      .addTo(map)
+      .bindPopup('<b>CRITICAL SOS #402</b><br>12 Citizens Trapped');
+
+    // 3. Define Hazard Polygon (Flood Zone)
+    const floodZone = L.polygon([
+      [19.0790, 73.0940],
+      [19.0840, 73.0980],
+      [19.0800, 73.1010],
+      [19.0750, 73.0960]
+    ], {
+      color: '#ef4444',
+      fillColor: '#ef4444',
+      fillOpacity: 0.45
+    }).addTo(map).bindPopup('<b>HAZARD ZONE:</b> Flooded Highway (Depth 4.2ft)');
+
+    // Initial camera focus on known mission targets
+    map.fitBounds(floodZone.getBounds().pad(0.4));
+
+    let responderMarker = null;
+    let pathLine = null;
+    let initialZoomSet = false;
+
+    // 4. Handle Live Telemetry Stream
+    socket.on('telemetry-broadcast', (data) => {
+      const { id, lat, lng } = data;
+
+      document.getElementById('unit-status').innerHTML = `<span style="color:#4ade80;">● ${id} Broadcasting</span>`;
+      document.getElementById('unit-coords').innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+
+      const currentPos = [lat, lng];
+
+      if (!responderMarker) {
+        responderMarker = L.marker(currentPos, { icon: createPin('#f97316', 'NDRF') })
+          .addTo(map)
+          .bindPopup(`<b>${id}</b><br>Live Telemetry Stream`)
+          .openPopup();
+      } else {
+        responderMarker.setLatLng(currentPos);
+      }
+
+      // Auto-fit camera view tightly to responder, flood zone, and SOS
+      if (!initialZoomSet) {
+        const tacticalGroup = new L.featureGroup([responderMarker, floodZone, sosMarker]);
+        map.fitBounds(tacticalGroup.getBounds().pad(0.2));
+        initialZoomSet = true;
+      }
+
+      // Dynamic path recalculation avoiding flood zone
+      if (pathLine) { map.removeLayer(pathLine); }
+      pathLine = L.polyline([
+        currentPos,
+        [19.0740, 73.0990], // Detour waypoint around flood zone
+        sosCoords
+      ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+    });
+  </script>
+</body>
+</html>

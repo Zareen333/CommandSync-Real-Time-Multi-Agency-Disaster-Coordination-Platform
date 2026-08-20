@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Responder GPS Unit</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { background: #0f172a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }
+    .btn { background: #2563eb; color: white; border: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    #status { margin-top: 20px; font-size: 14px; color: #94a3b8; }
+    #data { font-family: monospace; margin-top: 15px; color: #4ade80; }
+  </style>
+</head>
+<body>
+  <h2>📡 NDRF Field Unit #01</h2>
+  <p style="color:#94a3b8; margin-bottom:20px;">Live Tactical Geolocation Streamer</p>
+  <button class="btn" onclick="startBroadcasting()">Start Live GPS Stream</button>
+  <div id="status">Standby</div>
+  <div id="data"></div>
+
+  <script>
+    const socket = io();
+
+    function startBroadcasting() {
+      if (!("geolocation" in navigator)) {
+        alert("Geolocation not supported.");
+        return;
+      }
+
+      document.getElementById('status').innerText = "Acquiring live GPS...";
+
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          const payload = {
+            id: 'NDRF-Unit-01',
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          };
+          socket.emit('gps-update', payload);
+          document.getElementById('status').innerText = "● Transmitting live coordinates";
+          document.getElementById('status').style.color = "#4ade80";
+          document.getElementById('data').innerText = `Lat: ${payload.lat.toFixed(5)}\nLng: ${payload.lng.toFixed(5)}`;
+        },
+        (err) => {
+          document.getElementById('status').innerText = "GPS Error: " + err.message;
+          document.getElementById('status').style.color = "#ef4444";
+        },
+        { enableHighAccuracy: true, maximumAge: 1000 }
+      );
+    }
+  </script>
+</body>
+</html>
