@@ -78,8 +78,8 @@
 
     <div class="card">
       <div class="card-title">🚨 Active Distress Incident</div>
-      <div id="active-sos-title" style="color: #ef4444; font-weight: bold;">SOS #402: 12 Trapped</div>
-      <div id="active-sos-sub" style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Sector 4 Lowlands (Water Level: 3.8ft)</div>
+      <div id="active-sos-title" style="color: #94a3b8; font-weight: bold;">No Active SOS Signal</div>
+      <div id="active-sos-sub" style="font-size: 12px; color: #64748b; margin-top: 4px;">Click anywhere on the map to trigger a distress alert.</div>
     </div>
 
     <div class="card">
@@ -87,7 +87,6 @@
       <div id="routing-status" style="color: #4ade80; font-size: 12px;">
         ✔ Dynamic Hazard Engine: Active (Avoiding Flood Polygon)
       </div>
-      <p style="font-size: 11px; color: #64748b; margin-top: 6px;">💡 <i>Tip: Click anywhere on the map to trigger a new live SOS alert.</i></p>
     </div>
   </div>
 
@@ -109,13 +108,7 @@
       });
     }
 
-    // 2. Initial SOS Target
-    let currentSosCoords = [19.0850, 73.1020];
-    const sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
-      .addTo(map)
-      .bindPopup('<b>CRITICAL SOS #402</b><br>12 Citizens Trapped');
-
-    // 3. Define Hazard Polygon (Flood Zone)
+    // 2. Define Hazard Polygon (Flood Zone)
     const floodZone = L.polygon([
       [19.0790, 73.0940],
       [19.0840, 73.0980],
@@ -127,14 +120,15 @@
       fillOpacity: 0.45
     }).addTo(map).bindPopup('<b>HAZARD ZONE:</b> Flooded Highway (Depth 4.2ft)');
 
-    // Initial camera focus on known mission targets
     map.fitBounds(floodZone.getBounds().pad(0.4));
 
     let responderMarker = null;
+    let sosMarker = null;
+    let currentSosCoords = null;
     let pathLine = null;
     let initialZoomSet = false;
 
-    // 4. Click Map to Trigger Live Citizen SOS
+    // 3. Click Map to Trigger Live Citizen SOS
     map.on('click', (e) => {
       const newSosData = {
         lat: e.latlng.lat,
@@ -144,18 +138,23 @@
       socket.emit('send-sos', newSosData);
     });
 
-    // 5. Listen for SOS Broadcasts
+    // 4. Listen for SOS Broadcasts
     socket.on('sos-broadcast', (data) => {
       currentSosCoords = [data.lat, data.lng];
 
-      // Drop new SOS Pin on Map
-      L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
+      // Remove previous SOS pin if one already exists
+      if (sosMarker) { map.removeLayer(sosMarker); }
+
+      // Drop new single SOS Pin on Map
+      sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
         .addTo(map)
         .bindPopup(`<b>CRITICAL ${data.id}</b><br>Live Citizen Distress Signal!`)
         .openPopup();
 
       // Update Sidebar Card
+      document.getElementById('active-sos-title').style.color = '#ef4444';
       document.getElementById('active-sos-title').innerText = `${data.id}: Live Distress Alert`;
+      document.getElementById('active-sos-sub').style.color = '#94a3b8';
       document.getElementById('active-sos-sub').innerText = `Lat: ${data.lat.toFixed(4)}, Lng: ${data.lng.toFixed(4)} (Dispatch Assigned)`;
 
       // Recalculate Detour Path directly to NEW SOS
@@ -170,7 +169,7 @@
       }
     });
 
-    // 6. Handle Live Telemetry Stream
+    // 5. Handle Live Telemetry Stream
     socket.on('telemetry-broadcast', (data) => {
       const { id, lat, lng } = data;
 
@@ -190,18 +189,22 @@
 
       // Auto-fit camera view on first signal
       if (!initialZoomSet) {
-        const tacticalGroup = new L.featureGroup([responderMarker, floodZone, sosMarker]);
+        const groupArray = [responderMarker, floodZone];
+        if (sosMarker) groupArray.push(sosMarker);
+        const tacticalGroup = new L.featureGroup(groupArray);
         map.fitBounds(tacticalGroup.getBounds().pad(0.2));
         initialZoomSet = true;
       }
 
-      // Dynamic path recalculation avoiding flood zone
-      if (pathLine) { map.removeLayer(pathLine); }
-      pathLine = L.polyline([
-        currentPos,
-        [19.0740, 73.0990], // Detour waypoint around flood zone
-        currentSosCoords
-      ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+      // Dynamic path recalculation avoiding flood zone (if SOS exists)
+      if (currentSosCoords) {
+        if (pathLine) { map.removeLayer(pathLine); }
+        pathLine = L.polyline([
+          currentPos,
+          [19.0740, 73.0990], // Detour waypoint around flood zone
+          currentSosCoords
+        ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+      }
     });
   </script>
 </body>
