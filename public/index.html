@@ -59,7 +59,7 @@
       box-shadow: 0 0 12px rgba(0,0,0,0.6);
     }
     
-    #map { flex: 1; height: 100%; }
+    #map { flex: 1; height: 100%; cursor: crosshair; }
   </style>
 </head>
 <body>
@@ -78,8 +78,8 @@
 
     <div class="card">
       <div class="card-title">🚨 Active Distress Incident</div>
-      <div style="color: #ef4444; font-weight: bold;">SOS #402: 12 Trapped</div>
-      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Sector 4 Lowlands (Water Level: 3.8ft)</div>
+      <div id="active-sos-title" style="color: #ef4444; font-weight: bold;">SOS #402: 12 Trapped</div>
+      <div id="active-sos-sub" style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Sector 4 Lowlands (Water Level: 3.8ft)</div>
     </div>
 
     <div class="card">
@@ -87,6 +87,7 @@
       <div id="routing-status" style="color: #4ade80; font-size: 12px;">
         ✔ Dynamic Hazard Engine: Active (Avoiding Flood Polygon)
       </div>
+      <p style="font-size: 11px; color: #64748b; margin-top: 6px;">💡 <i>Tip: Click anywhere on the map to trigger a new live SOS alert.</i></p>
     </div>
   </div>
 
@@ -108,9 +109,9 @@
       });
     }
 
-    // 2. Define SOS Marker
-    const sosCoords = [19.0850, 73.1020];
-    const sosMarker = L.marker(sosCoords, { icon: createPin('#ef4444', 'SOS') })
+    // 2. Initial SOS Target
+    let currentSosCoords = [19.0850, 73.1020];
+    const sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
       .addTo(map)
       .bindPopup('<b>CRITICAL SOS #402</b><br>12 Citizens Trapped');
 
@@ -133,7 +134,43 @@
     let pathLine = null;
     let initialZoomSet = false;
 
-    // 4. Handle Live Telemetry Stream
+    // 4. Click Map to Trigger Live Citizen SOS
+    map.on('click', (e) => {
+      const newSosData = {
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        id: 'SOS #' + Math.floor(100 + Math.random() * 900)
+      };
+      socket.emit('send-sos', newSosData);
+    });
+
+    // 5. Listen for SOS Broadcasts
+    socket.on('sos-broadcast', (data) => {
+      currentSosCoords = [data.lat, data.lng];
+
+      // Drop new SOS Pin on Map
+      L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
+        .addTo(map)
+        .bindPopup(`<b>CRITICAL ${data.id}</b><br>Live Citizen Distress Signal!`)
+        .openPopup();
+
+      // Update Sidebar Card
+      document.getElementById('active-sos-title').innerText = `${data.id}: Live Distress Alert`;
+      document.getElementById('active-sos-sub').innerText = `Lat: ${data.lat.toFixed(4)}, Lng: ${data.lng.toFixed(4)} (Dispatch Assigned)`;
+
+      // Recalculate Detour Path directly to NEW SOS
+      if (responderMarker) {
+        const currentPos = responderMarker.getLatLng();
+        if (pathLine) { map.removeLayer(pathLine); }
+        pathLine = L.polyline([
+          [currentPos.lat, currentPos.lng],
+          [19.0740, 73.0990], // Detour waypoint avoiding flood polygon
+          currentSosCoords
+        ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+      }
+    });
+
+    // 6. Handle Live Telemetry Stream
     socket.on('telemetry-broadcast', (data) => {
       const { id, lat, lng } = data;
 
@@ -151,7 +188,7 @@
         responderMarker.setLatLng(currentPos);
       }
 
-      // Auto-fit camera view tightly to responder, flood zone, and SOS
+      // Auto-fit camera view on first signal
       if (!initialZoomSet) {
         const tacticalGroup = new L.featureGroup([responderMarker, floodZone, sosMarker]);
         map.fitBounds(tacticalGroup.getBounds().pad(0.2));
@@ -163,7 +200,7 @@
       pathLine = L.polyline([
         currentPos,
         [19.0740, 73.0990], // Detour waypoint around flood zone
-        sosCoords
+        currentSosCoords
       ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
     });
   </script>

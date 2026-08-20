@@ -11,8 +11,15 @@ app.use(express.static('public'));
 io.on('connection', (socket) => {
   console.log(`[+] Unit Connected: ${socket.id}`);
 
+  // Relay live responder GPS telemetry
   socket.on('gps-update', (data) => {
     io.emit('telemetry-broadcast', data);
+  });
+
+  // Relay new live citizen SOS distress alerts to EOC dashboards
+  socket.on('send-sos', (data) => {
+    console.log(`[🚨 SOS ALERT] ${data.id} created at Lat: ${data.lat}, Lng: ${data.lng}`);
+    io.emit('sos-broadcast', data);
   });
 
   socket.on('disconnect', () => {
