@@ -128,54 +128,59 @@
     let pathLine = null;
     let initialZoomSet = false;
 
-    // Helper to send SOS on click
-    function triggerSos(lat, lng) {
-      const newSosData = {
-        lat: lat,
-        lng: lng,
-        id: 'SOS #' + Math.floor(100 + Math.random() * 900)
-      };
-      console.log("Sending SOS click event:", newSosData);
-      socket.emit('send-sos', newSosData);
-    }
+    // 3. Core Function to Render SOS and Update Detour Route
+    function renderSosPoint(lat, lng, id) {
+      currentSosCoords = [lat, lng];
 
-    // 3. Click Map or Polygon to Trigger Live Citizen SOS
-    map.on('click', (e) => { triggerSos(e.latlng.lat, e.latlng.lng); });
-    floodZone.on('click', (e) => { triggerSos(e.latlng.lat, e.latlng.lng); });
-
-    // 4. Listen for SOS Broadcasts
-    socket.on('sos-broadcast', (data) => {
-      console.log("SOS Broadcast received on dashboard:", data);
-      currentSosCoords = [data.lat, data.lng];
-
-      // Remove previous SOS pin if one already exists
+      // Remove old SOS marker if it exists
       if (sosMarker) { map.removeLayer(sosMarker); }
 
-      // Drop new single SOS Pin on Map
+      // Drop new SOS Pin on Map
       sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
         .addTo(map)
-        .bindPopup(`<b>CRITICAL ${data.id}</b><br>Live Citizen Distress Signal!`)
+        .bindPopup(`<b>CRITICAL ${id}</b><br>Live Citizen Distress Signal!`)
         .openPopup();
 
-      // Update Sidebar Card
+      // Update Sidebar Information
       document.getElementById('active-sos-title').style.color = '#ef4444';
-      document.getElementById('active-sos-title').innerText = `${data.id}: Live Distress Alert`;
+      document.getElementById('active-sos-title').innerText = `${id}: Live Distress Alert`;
       document.getElementById('active-sos-sub').style.color = '#94a3b8';
-      document.getElementById('active-sos-sub').innerText = `Lat: ${data.lat.toFixed(4)}, Lng: ${data.lng.toFixed(4)} (Dispatch Assigned)`;
+      document.getElementById('active-sos-sub').innerText = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Dispatch Assigned)`;
 
-      // Recalculate Detour Path directly to NEW SOS
+      // Recalculate Detour Path from current responder position to NEW SOS
       if (responderMarker) {
         const currentPos = responderMarker.getLatLng();
         if (pathLine) { map.removeLayer(pathLine); }
         pathLine = L.polyline([
           [currentPos.lat, currentPos.lng],
-          [19.0740, 73.0990], // Detour waypoint avoiding flood polygon
+          [19.0740, 73.0990], // Waypoint avoiding flood polygon
           currentSosCoords
         ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
       }
+    }
+
+    // 4. Click Map or Flood Polygon to Instantly Trigger Live Citizen SOS
+    function handleMapClick(e) {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+      const sosId = 'SOS #' + Math.floor(100 + Math.random() * 900);
+
+      // Instant Local Render
+      renderSosPoint(lat, lng, sosId);
+
+      // Network Broadcast to other clients
+      socket.emit('send-sos', { lat: lat, lng: lng, id: sosId });
+    }
+
+    map.on('click', handleMapClick);
+    floodZone.on('click', handleMapClick);
+
+    // 5. Listen for SOS Broadcasts from other clients
+    socket.on('sos-broadcast', (data) => {
+      renderSosPoint(data.lat, data.lng, data.id);
     });
 
-    // 5. Handle Live Telemetry Stream
+    // 6. Handle Live Telemetry Stream from Field Units
     socket.on('telemetry-broadcast', (data) => {
       const { id, lat, lng } = data;
 
@@ -193,7 +198,7 @@
         responderMarker.setLatLng(currentPos);
       }
 
-      // Auto-fit camera view on first signal
+      // Auto-fit camera view on first telemetry packet
       if (!initialZoomSet) {
         const groupArray = [responderMarker, floodZone];
         if (sosMarker) groupArray.push(sosMarker);
@@ -207,7 +212,7 @@
         if (pathLine) { map.removeLayer(pathLine); }
         pathLine = L.polyline([
           currentPos,
-          [19.0740, 73.0990], // Detour waypoint around flood zone
+          [19.0740, 73.0990], // Waypoint avoiding flood polygon
           currentSosCoords
         ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
       }
