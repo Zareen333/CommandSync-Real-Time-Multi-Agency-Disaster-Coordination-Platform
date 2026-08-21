@@ -3,107 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CommandSync | Live Tactical EOC</title>
+  <title>CommandSync | Tactical EOC</title>
   
-  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  
-  <!-- Socket.io CDN for Guaranteed Loading -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { display: flex; height: 100vh; background-color: #0b1120; color: #f8fafc; overflow: hidden; }
-    
-    #sidebar {
-      width: 360px;
-      background-color: #0f172a;
-      border-right: 1px solid #1e293b;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      z-index: 1000;
-      overflow-y: auto;
-    }
-    
-    .badge {
-      display: inline-block;
-      padding: 4px 8px;
-      font-size: 11px;
-      font-weight: bold;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
-    .badge-live { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
-    
-    h1 { font-size: 19px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; }
-    p.subtitle { font-size: 12px; color: #94a3b8; margin-top: -6px; }
-
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 13px;
-    }
-    .card-title { font-weight: bold; margin-bottom: 6px; color: #e2e8f0; }
-
-    .btn-sos {
-      background: #ef4444;
-      color: white;
-      border: none;
-      padding: 10px;
-      border-radius: 6px;
-      font-weight: bold;
-      width: 100%;
-      cursor: pointer;
-      margin-top: 8px;
-      transition: 0.2s;
-    }
-    .btn-sos:hover { background: #dc2626; }
-
-    .custom-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 11px;
-      font-weight: 700;
-      border-radius: 50%;
-      border: 2px solid white;
-      box-shadow: 0 0 12px rgba(0,0,0,0.6);
-    }
-    
-    #map { flex: 1; height: 100%; cursor: crosshair; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { display: flex; height: 100vh; background: #0b1120; color: #fff; overflow: hidden; }
+    #sidebar { width: 340px; background: #0f172a; border-right: 1px solid #1e293b; padding: 20px; display: flex; flex-direction: column; gap: 12px; z-index: 2000; }
+    #map { flex: 1; height: 100%; z-index: 1; cursor: crosshair; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 13px; }
+    .btn-sos { background: #ef4444; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 8px; }
+    .btn-sos:active { background: #b91c1c; }
+    .custom-pin { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; border: 2px solid white; font-size: 11px; }
   </style>
 </head>
 <body>
 
   <div id="sidebar">
-    <div>
-      <h1>CommandSync <span class="badge badge-live">● LIVE EOC</span></h1>
-      <p class="subtitle">Disaster Multi-Agency Coordination</p>
+    <h2>CommandSync <span style="font-size:11px; color:#4ade80; border:1px solid #22c55e; padding:2px 6px; border-radius:4px;">● LIVE</span></h2>
+    
+    <div class="card">
+      <strong>📡 Responder Telemetry:</strong>
+      <div id="unit-status" style="color:#94a3b8; margin-top:4px;">Waiting for field unit...</div>
+      <div id="unit-coords" style="font-family:monospace; color:#38bdf8; margin-top:2px; font-size:11px;"></div>
     </div>
 
     <div class="card">
-      <div class="card-title">📡 Live Responder Telemetry</div>
-      <div id="unit-status" style="color: #94a3b8;">Waiting for field unit...</div>
-      <div id="unit-coords" style="font-family: monospace; color: #38bdf8; margin-top: 4px; font-size: 12px;"></div>
+      <strong>🚨 Active Incident:</strong>
+      <div id="sos-title" style="color:#ef4444; font-weight:bold; margin-top:4px;">No Active SOS</div>
+      <div id="sos-sub" style="font-size:11px; color:#64748b; margin-top:2px;">Click map OR tap button below:</div>
+      <button class="btn-sos" onclick="forceSosAlert()">🚨 TRIGGER SOS NOW</button>
     </div>
 
     <div class="card">
-      <div class="card-title">🚨 Active Distress Incident</div>
-      <div id="active-sos-title" style="color: #94a3b8; font-weight: bold;">No Active SOS Signal</div>
-      <div id="active-sos-sub" style="font-size: 12px; color: #64748b; margin-top: 4px;">Click anywhere on map OR tap button below:</div>
-      <button class="btn-sos" onclick="triggerManualSos()">🚨 TRIGGER SOS ALERT</button>
-    </div>
-
-    <div class="card">
-      <div class="card-title">⚡ Operational Log</div>
-      <div id="log-feed" style="font-size: 11px; color: #38bdf8; font-family: monospace; max-height: 80px; overflow-y: auto;">
-        System initialized. Ready for distress signals.
+      <strong>⚡ Debug Log:</strong>
+      <div id="debug-log" style="font-family:monospace; font-size:11px; color:#38bdf8; max-height:100px; overflow-y:auto; margin-top:4px;">
+        System ready.
       </div>
     </div>
   </div>
@@ -111,133 +49,106 @@
   <div id="map"></div>
 
   <script>
-    // Initialize Socket connection
-    const socket = typeof io !== 'undefined' ? io() : null;
-
-    function logMsg(text) {
-      const feed = document.getElementById('log-feed');
-      feed.innerHTML = `> ${text}<br>` + feed.innerHTML;
+    function printLog(msg) {
+      const el = document.getElementById('debug-log');
+      el.innerHTML = `> ${msg}<br>` + el.innerHTML;
     }
 
-    // 1. Initialize Map
-    const map = L.map('map').setView([19.0782, 73.0915], 15);
+    // Connect Socket.io safely
+    let socket = null;
+    try {
+      socket = io();
+      printLog("Connected to WebSocket gateway.");
+    } catch(e) {
+      printLog("WebSocket offline (local mode).");
+    }
+
+    // Initialize Leaflet Map with tap lock disabled
+    const map = L.map('map', { tap: false }).setView([19.0782, 73.0915], 15);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-    function createPin(color, label) {
+    function makeIcon(color, text) {
       return L.divIcon({
-        className: 'custom-icon',
-        html: `<div style="background-color:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${label}</div>`,
+        className: 'custom-pin',
+        html: `<div style="background:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${text}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
       });
     }
 
-    // 2. Define Flood Zone Polygon
+    // Define Flood Polygon
     const floodZone = L.polygon([
       [19.0790, 73.0940],
       [19.0840, 73.0980],
       [19.0800, 73.1010],
       [19.0750, 73.0960]
-    ], {
-      color: '#ef4444',
-      fillColor: '#ef4444',
-      fillOpacity: 0.45,
-      interactive: true
-    }).addTo(map);
-
-    map.fitBounds(floodZone.getBounds().pad(0.4));
+    ], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.45 }).addTo(map);
 
     let responderMarker = null;
     let sosMarker = null;
-    let currentSosCoords = null;
-    let pathLine = null;
+    let sosCoords = null;
+    let detourLine = null;
 
-    // 3. Render SOS Function
-    function renderSosPoint(lat, lng, sosId) {
-      currentSosCoords = [lat, lng];
+    // Core function to draw SOS pin and route
+    function createSos(lat, lng, id) {
+      sosCoords = [lat, lng];
 
-      if (sosMarker) { map.removeLayer(sosMarker); }
+      if (sosMarker) map.removeLayer(sosMarker);
 
-      sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
+      sosMarker = L.marker(sosCoords, { icon: makeIcon('#ef4444', 'SOS') })
         .addTo(map)
-        .bindPopup(`<b>CRITICAL ${sosId}</b><br>Live Citizen Distress Alert!`)
+        .bindPopup(`<b>${id}</b><br>Citizens Trapped!`)
         .openPopup();
 
-      document.getElementById('active-sos-title').style.color = '#ef4444';
-      document.getElementById('active-sos-title').innerText = `${sosId}: Live Alert`;
-      document.getElementById('active-sos-sub').style.color = '#94a3b8';
-      document.getElementById('active-sos-sub').innerText = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+      document.getElementById('sos-title').innerText = `${id} ACTIVE`;
+      document.getElementById('sos-sub').innerText = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
 
-      logMsg(`Created ${sosId} at [${lat.toFixed(3)}, ${lng.toFixed(3)}]`);
+      printLog(`SOS placed at [${lat.toFixed(3)}, ${lng.toFixed(3)}]`);
 
-      // Update Path if responder exists
+      // Redraw path if responder exists
       if (responderMarker) {
-        const pos = responderMarker.getLatLng();
-        if (pathLine) { map.removeLayer(pathLine); }
-        pathLine = L.polyline([
-          [pos.lat, pos.lng],
-          [19.0740, 73.0990],
-          currentSosCoords
-        ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+        const p = responderMarker.getLatLng();
+        if (detourLine) map.removeLayer(detourLine);
+        detourLine = L.polyline([[p.lat, p.lng], [19.0740, 73.0990], sosCoords], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
       }
     }
 
-    // 4. Map Click Handler
-    function handleMapClick(e) {
-      const lat = e.latlng.lat;
-      const lng = e.latlng.lng;
+    // Trigger SOS from click
+    function onMapClick(e) {
       const sosId = 'SOS #' + Math.floor(100 + Math.random() * 900);
-
-      renderSosPoint(lat, lng, sosId);
-
-      if (socket) {
-        socket.emit('send-sos', { lat: lat, lng: lng, id: sosId });
-      }
+      createSos(e.latlng.lat, e.latlng.lng, sosId);
+      if (socket) socket.emit('send-sos', { lat: e.latlng.lat, lng: e.latlng.lng, id: sosId });
     }
 
-    map.on('click', handleMapClick);
-    floodZone.on('click', handleMapClick);
+    map.on('click', onMapClick);
+    floodZone.on('click', onMapClick);
 
-    // Manual Fallback Button Handler
-    function triggerManualSos() {
+    // Button Fallback
+    function forceSosAlert() {
       const center = map.getCenter();
       const sosId = 'SOS #' + Math.floor(100 + Math.random() * 900);
-      renderSosPoint(center.lat, center.lng, sosId);
-      if (socket) {
-        socket.emit('send-sos', { lat: center.lat, lng: center.lng, id: sosId });
-      }
+      createSos(center.lat, center.lng, sosId);
+      if (socket) socket.emit('send-sos', { lat: center.lat, lng: center.lng, id: sosId });
     }
 
-    // 5. Socket Event Listeners
+    // Network Listeners
     if (socket) {
-      socket.on('sos-broadcast', (data) => {
-        renderSosPoint(data.lat, data.lng, data.id);
-      });
+      socket.on('sos-broadcast', data => createSos(data.lat, data.lng, data.id));
 
-      socket.on('telemetry-broadcast', (data) => {
-        const { id, lat, lng } = data;
-
-        document.getElementById('unit-status').innerHTML = `<span style="color:#4ade80;">● ${id} Active</span>`;
-        document.getElementById('unit-coords').innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
-
-        const pos = [lat, lng];
+      socket.on('telemetry-broadcast', data => {
+        document.getElementById('unit-status').innerHTML = `<span style="color:#4ade80;">● ${data.id} Active</span>`;
+        document.getElementById('unit-coords').innerText = `Lat: ${data.lat.toFixed(5)}, Lng: ${data.lng.toFixed(5)}`;
+        const pos = [data.lat, data.lng];
 
         if (!responderMarker) {
-          responderMarker = L.marker(pos, { icon: createPin('#f97316', 'NDRF') })
-            .addTo(map)
-            .bindPopup(`<b>${id}</b><br>Live Telemetry Stream`)
-            .openPopup();
+          responderMarker = L.marker(pos, { icon: makeIcon('#f97316', 'NDRF') }).addTo(map);
         } else {
           responderMarker.setLatLng(pos);
         }
 
-        if (currentSosCoords) {
-          if (pathLine) { map.removeLayer(pathLine); }
-          pathLine = L.polyline([
-            pos,
-            [19.0740, 73.0990],
-            currentSosCoords
-          ], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+        if (sosCoords) {
+          if (detourLine) map.removeLayer(detourLine);
+          detourLine = L.polyline([pos, [19.0740, 73.0990], sosCoords], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
         }
       });
     }
