@@ -128,18 +128,24 @@
     let pathLine = null;
     let initialZoomSet = false;
 
-    // 3. Click Map to Trigger Live Citizen SOS
-    map.on('click', (e) => {
+    // Helper to send SOS on click
+    function triggerSos(lat, lng) {
       const newSosData = {
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
+        lat: lat,
+        lng: lng,
         id: 'SOS #' + Math.floor(100 + Math.random() * 900)
       };
+      console.log("Sending SOS click event:", newSosData);
       socket.emit('send-sos', newSosData);
-    });
+    }
+
+    // 3. Click Map or Polygon to Trigger Live Citizen SOS
+    map.on('click', (e) => { triggerSos(e.latlng.lat, e.latlng.lng); });
+    floodZone.on('click', (e) => { triggerSos(e.latlng.lat, e.latlng.lng); });
 
     // 4. Listen for SOS Broadcasts
     socket.on('sos-broadcast', (data) => {
+      console.log("SOS Broadcast received on dashboard:", data);
       currentSosCoords = [data.lat, data.lng];
 
       // Remove previous SOS pin if one already exists
