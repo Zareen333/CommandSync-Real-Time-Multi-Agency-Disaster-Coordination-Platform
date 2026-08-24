@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CommandSync | Responder GPS Unit</title>
+  <title>CommandSync | Field Responder Unit</title>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #0f172a; color: white; text-align: center; padding: 30px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 22px; width: 100%; max-width: 380px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-    h2 { font-size: 20px; color: #38bdf8; margin-bottom: 4px; }
-    p.subtitle { color: #94a3b8; font-size: 12px; margin-bottom: 18px; }
+    body { background: #0f172a; color: white; text-align: center; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; width: 100%; max-width: 380px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h2 { font-size: 19px; color: #38bdf8; margin-bottom: 4px; }
+    p.subtitle { color: #94a3b8; font-size: 12px; margin-bottom: 16px; }
     select { width: 100%; padding: 12px; background: #0b1120; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; font-size: 14px; margin-bottom: 16px; outline: none; }
     .btn { background: #2563eb; color: white; border: none; padding: 14px; width: 100%; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; }
     .btn:active { transform: scale(0.98); }
-    #status { margin-top: 18px; font-size: 13px; color: #94a3b8; }
-    #data { font-family: monospace; margin-top: 12px; color: #4ade80; font-size: 13px; line-height: 1.5; }
+    #status { margin-top: 16px; font-size: 13px; color: #94a3b8; }
+    #data { font-family: monospace; margin-top: 10px; color: #4ade80; font-size: 12px; line-height: 1.5; }
+    #mission-card { display: none; background: #0b1120; border: 1px solid #f97316; border-radius: 6px; padding: 10px; margin-top: 14px; text-align: left; }
   </style>
 </head>
 <body>
@@ -24,24 +25,35 @@
     <h2>📡 Field Telemetry Uplink</h2>
     <p class="subtitle">CommandSync Zero-Install Mobile Node</p>
 
-    <label style="font-size:12px; color:#cbd5e1; display:block; text-align:left; margin-bottom:6px;">Select Agency Unit:</label>
+    <label style="font-size:12px; color:#cbd5e1; display:block; text-align:left; margin-bottom:6px;">Select Assigned Unit:</label>
     <select id="unitSelect">
-      <option value="NDRF-Unit-12">NDRF Rescue Boat #12 (Orange)</option>
-      <option value="POLICE-Unit-04">Police Rapid Patrol 04 (Blue)</option>
-      <option value="AMB-Med-01">ICU Ambulance Med-01 (Green)</option>
+      <option value="NDRF-Unit-12">NDRF Rescue Boat #12</option>
+      <option value="POLICE-Unit-04">Police Patrol Unit 04</option>
+      <option value="AMB-Med-01">ICU Ambulance Med-01</option>
     </select>
 
-    <button class="btn" id="streamBtn" onclick="startBroadcasting()">Start Live GPS Stream</button>
+    <button class="btn" id="streamBtn" onclick="toggleBroadcasting()">Start Live GPS Stream</button>
 
     <div id="status">Status: Standby</div>
     <div id="data"></div>
+
+    <div id="mission-card">
+      <strong style="color:#fb923c; font-size:12px;">🚨 ACTIVE MISSION DISPATCHED:</strong>
+      <div id="mission-info" style="font-size:11px; color:#e2e8f0; margin-top:4px;"></div>
+    </div>
   </div>
 
   <script>
     const socket = typeof io !== 'undefined' ? io() : null;
     let watchId = null;
 
-    function startBroadcasting() {
+    // Auto-select unit based on URL query parameter (?role=ndrf)
+    const urlParams = new URLSearchParams(window.location.search);
+    const roleParam = urlParams.get('role');
+    if (roleParam === 'police') document.getElementById('unitSelect').value = "POLICE-Unit-04";
+    if (roleParam === 'med') document.getElementById('unitSelect').value = "AMB-Med-01";
+
+    function toggleBroadcasting() {
       const btn = document.getElementById('streamBtn');
       const status = document.getElementById('status');
       const dataBox = document.getElementById('data');
@@ -77,7 +89,7 @@
 
           btn.innerText = "Stop Telemetry Stream";
           btn.style.background = "#ef4444";
-          status.innerHTML = `<span style="color:#4ade80;">● Transmitting live GPS</span>`;
+          status.innerHTML = `<span style="color:#4ade80;">● Broadcasting telemetry</span>`;
           dataBox.innerText = `Unit: ${payload.id}\nLat: ${payload.lat.toFixed(5)}\nLng: ${payload.lng.toFixed(5)}`;
         },
         (err) => {
@@ -86,6 +98,20 @@
         },
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
       );
+    }
+
+    if (socket) {
+      socket.on('agency-mission-assigned', (data) => {
+        const missionCard = document.getElementById('mission-card');
+        const missionInfo = document.getElementById('mission-info');
+        missionCard.style.display = 'block';
+        missionInfo.innerHTML = `
+          Incident: <b>${data.sosId}</b><br>
+          Assigned to: <b>${data.agency}</b><br>
+          Target: Lat ${data.lat.toFixed(4)}, Lng ${data.lng.toFixed(4)}<br>
+          Time: ${data.timestamp}
+        `;
+      });
     }
   </script>
 </body>

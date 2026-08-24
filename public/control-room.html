@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CommandSync | Master EOC Control Room</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #0b1120; color: #f8fafc; overflow: hidden; }
+    
+    #sidebar {
+      width: 400px;
+      background-color: #0f172a;
+      border-right: 1px solid #1e293b;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    h1 { font-size: 18px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; }
+    .badge-live { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; padding: 2px 6px; font-size: 10px; border-radius: 4px; }
+
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 12.5px; }
+    .card-title { font-weight: bold; margin-bottom: 6px; color: #e2e8f0; display: flex; justify-content: space-between; }
+    
+    .sos-item { background: #0f172a; border-left: 4px solid #ef4444; padding: 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; }
+    .dispatch-btn-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-top: 8px; }
+    .btn-dispatch { padding: 6px 4px; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; color: white; }
+    .btn-ndrf { background: #f97316; }
+    .btn-pol { background: #3b82f6; }
+    .btn-med { background: #22c55e; }
+
+    .custom-icon { display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 800; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.7); }
+    #map { flex: 1; height: 100%; cursor: crosshair; }
+    .range-slider { width: 100%; margin-top: 6px; accent-color: #ef4444; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div>
+      <h1>CommandSync EOC <span class="badge-live">● LIVE</span></h1>
+      <p style="font-size:11px; color:#94a3b8;">Master Emergency Assessment & Dispatch Hub</p>
+    </div>
+
+    <!-- Incoming Citizen Distress Queue -->
+    <div class="card">
+      <div class="card-title">
+        <span>🚨 Incident Triage Queue</span>
+        <span id="queue-count" style="color:#ef4444; font-size:11px;">Monitoring</span>
+      </div>
+      <div id="sos-queue-container" style="max-height: 200px; overflow-y: auto;">
+        <div id="no-alerts-msg" style="color: #64748b; font-size: 11.5px; text-align: center; padding: 10px;">No incoming alerts. Waiting for SOS...</div>
+      </div>
+    </div>
+
+    <!-- Live Multi-Agency Fleets -->
+    <div class="card">
+      <div class="card-title">📡 Active Agency Fleets</div>
+      <div style="margin-top: 4px;"><span style="color:#f97316; font-weight:bold;">● NDRF Rescue #12:</span> <span id="ndrf-status" style="float:right; color:#4ade80;">Active</span></div>
+      <div style="margin-top: 6px;"><span style="color:#38bdf8; font-weight:bold;">● Police Patrol #04:</span> <span style="float:right; color:#38bdf8;">Patrolling</span></div>
+      <div style="margin-top: 6px;"><span style="color:#4ade80; font-weight:bold;">● ICU Ambulance #01:</span> <span style="float:right; color:#94a3b8;">Standby (4 Beds)</span></div>
+    </div>
+
+    <!-- Dynamic Hazard Engine -->
+    <div class="card">
+      <div class="card-title">🌊 Dynamic Hazard Boundary</div>
+      <p style="font-size:11px; color:#cbd5e1;">Simulate live water-level expansion to force rerouting:</p>
+      <input type="range" min="1" max="3" value="1" class="range-slider" id="floodSlider" oninput="adjustFloodLevel(this.value, true)">
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:2px;">
+        <span>Normal (3.5ft)</span>
+        <span>Moderate (5.0ft)</span>
+        <span>Critical (7.2ft)</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    const socket = typeof io !== 'undefined' ? io() : null;
+
+    // 1. Initialize Leaflet Map
+    const map = L.map('map', { tap: false }).setView([19.0782, 73.0915], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+    function createPin(color, label) {
+      return L.divIcon({
+        className: 'custom-icon',
+        html: `<div style="background:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${label}</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+    }
+
+    // 2. Static Multi-Agency Unit Pins
+    L.marker([19.0710, 73.0850], { icon: createPin('#3b82f6', 'POL') }).addTo(map).bindPopup('<b>Police Patrol Unit 04</b>');
+    L.marker([19.0680, 73.1020], { icon: createPin('#22c55e', 'AMB') }).addTo(map).bindPopup('<b>Trauma Ambulance Med-01</b>');
+
+    // 3. Dynamic Hazard Polygon Base Coordinates
+    let baseFloodCoords = [[19.0790, 73.0940], [19.0840, 73.0980], [19.0800, 73.1010], [19.0750, 73.0960]];
+    let floodZone = L.polygon(baseFloodCoords, { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.45 }).addTo(map);
+
+    let responderMarker = null;
+    let activePath = null;
+    let currentWaypoint = [19.0740, 73.0990];
+    let activeTargetCoords = null;
+
+    // 4. Handle Incoming Citizen SOS
+    function handleIncomingSos(data) {
+      const container = document.getElementById('sos-queue-container');
+      const emptyMsg = document.getElementById('no-alerts-msg');
+      if (emptyMsg) emptyMsg.remove();
+
+      const item = document.createElement('div');
+      item.className = "sos-item";
+      item.id = `queue-${data.id}`;
+      item.innerHTML = `
+        <strong style="color:#ef4444;">${data.id}: ${data.type}</strong>
+        <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">Phone: ${data.phone} | Time: ${data.timestamp}</div>
+        <div style="font-size:10.5px; font-family:monospace; color:#38bdf8;">Lat: ${data.lat.toFixed(4)}, Lng: ${data.lng.toFixed(4)}</div>
+        <div class="dispatch-btn-group" id="btn-group-${data.id}">
+          <button class="btn-dispatch btn-ndrf" onclick="dispatchAgency('${data.id}', 'NDRF', ${data.lat}, ${data.lng})">Dispatch NDRF</button>
+          <button class="btn-dispatch btn-pol" onclick="dispatchAgency('${data.id}', 'POLICE', ${data.lat}, ${data.lng})">Dispatch Police</button>
+          <button class="btn-dispatch btn-med" onclick="dispatchAgency('${data.id}', 'MED', ${data.lat}, ${data.lng})">Dispatch Med</button>
+        </div>
+      `;
+      container.prepend(item);
+
+      // Add SOS Pin on Map
+      L.marker([data.lat, data.lng], { icon: createPin('#ef4444', 'SOS') })
+        .addTo(map)
+        .bindPopup(`<b>${data.id}</b><br>${data.type}<br>Contact: ${data.phone}`)
+        .openPopup();
+    }
+
+    // 5. Control Room Dispatch Action
+    function dispatchAgency(sosId, agency, lat, lng) {
+      activeTargetCoords = [lat, lng];
+      const payload = { sosId, agency, lat, lng, timestamp: new Date().toLocaleTimeString() };
+      
+      if (socket) socket.emit('control-dispatch-order', payload);
+
+      // Draw Detour Route
+      recalculateRoute();
+
+      // Update UI card
+      const btnGroup = document.getElementById(`btn-group-${sosId}`);
+      if (btnGroup) {
+        btnGroup.innerHTML = `<div style="grid-column: span 3; font-size:11px; color:#4ade80; font-weight:bold;">✓ Dispatched to ${agency}</div>`;
+      }
+    }
+
+    function recalculateRoute() {
+      if (activeTargetCoords) {
+        const startPos = responderMarker ? [responderMarker.getLatLng().lat, responderMarker.getLatLng().lng] : [19.0720, 73.0880];
+        if (activePath) map.removeLayer(activePath);
+        activePath = L.polyline([startPos, currentWaypoint, activeTargetCoords], { color: '#38bdf8', weight: 4, dashArray: '6, 8' }).addTo(map);
+      }
+    }
+
+    // 6. Hazard Slider Engine
+    function adjustFloodLevel(level, emitSocket = false) {
+      const scale = parseFloat(level);
+      const expandedCoords = [
+        [19.0790 + (scale * 0.0010), 73.0940 - (scale * 0.0010)],
+        [19.0840 + (scale * 0.0020), 73.0980 + (scale * 0.0010)],
+        [19.0800 - (scale * 0.0010), 73.1010 + (scale * 0.0020)],
+        [19.0750 - (scale * 0.0020), 73.0960 - (scale * 0.0010)]
+      ];
+      map.removeLayer(floodZone);
+      floodZone = L.polygon(expandedCoords, { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.55 }).addTo(map);
+      currentWaypoint = [19.0740 - (scale * 0.0020), 73.0990 + (scale * 0.0015)];
+      recalculateRoute();
+      if (emitSocket && socket) socket.emit('update-hazard-level', { level: scale });
+    }
+
+    // 7. Network Listeners
+    if (socket) {
+      socket.on('citizen-sos-broadcast', data => handleIncomingSos(data));
+      socket.on('telemetry-broadcast', data => {
+        const pos = [data.lat, data.lng];
+        if (!responderMarker) {
+          responderMarker = L.marker(pos, { icon: createPin('#f97316', 'NDRF') }).addTo(map);
+        } else {
+          responderMarker.setLatLng(pos);
+        }
+        recalculateRoute();
+      });
+      socket.on('hazard-level-changed', data => {
+        document.getElementById('floodSlider').value = data.level;
+        adjustFloodLevel(data.level, false);
+      });
+    }
+  </script>
+</body>
+</html>
