@@ -3,50 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Responder GPS Unit</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <title>CommandSync | Responder GPS Unit</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
-    body { background: #0f172a; color: white; font-family: sans-serif; text-align: center; padding: 40px 20px; }
-    .btn { background: #2563eb; color: white; border: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
-    #status { margin-top: 20px; font-size: 14px; color: #94a3b8; }
-    #data { font-family: monospace; margin-top: 15px; color: #4ade80; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f172a; color: white; text-align: center; padding: 30px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 22px; width: 100%; max-width: 380px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h2 { font-size: 20px; color: #38bdf8; margin-bottom: 4px; }
+    p.subtitle { color: #94a3b8; font-size: 12px; margin-bottom: 18px; }
+    select { width: 100%; padding: 12px; background: #0b1120; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; font-size: 14px; margin-bottom: 16px; outline: none; }
+    .btn { background: #2563eb; color: white; border: none; padding: 14px; width: 100%; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn:active { transform: scale(0.98); }
+    #status { margin-top: 18px; font-size: 13px; color: #94a3b8; }
+    #data { font-family: monospace; margin-top: 12px; color: #4ade80; font-size: 13px; line-height: 1.5; }
   </style>
 </head>
 <body>
-  <h2>📡 NDRF Field Unit #01</h2>
-  <p style="color:#94a3b8; margin-bottom:20px;">Live Tactical Geolocation Streamer</p>
-  <button class="btn" onclick="startBroadcasting()">Start Live GPS Stream</button>
-  <div id="status">Standby</div>
-  <div id="data"></div>
+
+  <div class="card">
+    <h2>📡 Field Telemetry Uplink</h2>
+    <p class="subtitle">CommandSync Zero-Install Mobile Node</p>
+
+    <label style="font-size:12px; color:#cbd5e1; display:block; text-align:left; margin-bottom:6px;">Select Agency Unit:</label>
+    <select id="unitSelect">
+      <option value="NDRF-Unit-12">NDRF Rescue Boat #12 (Orange)</option>
+      <option value="POLICE-Unit-04">Police Rapid Patrol 04 (Blue)</option>
+      <option value="AMB-Med-01">ICU Ambulance Med-01 (Green)</option>
+    </select>
+
+    <button class="btn" id="streamBtn" onclick="startBroadcasting()">Start Live GPS Stream</button>
+
+    <div id="status">Status: Standby</div>
+    <div id="data"></div>
+  </div>
 
   <script>
-    const socket = io();
+    const socket = typeof io !== 'undefined' ? io() : null;
+    let watchId = null;
 
     function startBroadcasting() {
-      if (!("geolocation" in navigator)) {
-        alert("Geolocation not supported.");
+      const btn = document.getElementById('streamBtn');
+      const status = document.getElementById('status');
+      const dataBox = document.getElementById('data');
+      const unitId = document.getElementById('unitSelect').value;
+
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        btn.innerText = "Start Live GPS Stream";
+        btn.style.background = "#2563eb";
+        status.innerText = "Status: Paused";
+        status.style.color = "#94a3b8";
         return;
       }
 
-      document.getElementById('status').innerText = "Acquiring live GPS...";
+      if (!("geolocation" in navigator)) {
+        alert("Geolocation not supported on this device.");
+        return;
+      }
 
-      navigator.geolocation.watchPosition(
+      status.innerText = "Acquiring satellite lock...";
+      status.style.color = "#38bdf8";
+
+      watchId = navigator.geolocation.watchPosition(
         (pos) => {
           const payload = {
-            id: 'NDRF-Unit-01',
+            id: unitId,
             lat: pos.coords.latitude,
             lng: pos.coords.longitude
           };
-          socket.emit('gps-update', payload);
-          document.getElementById('status').innerText = "● Transmitting live coordinates";
-          document.getElementById('status').style.color = "#4ade80";
-          document.getElementById('data').innerText = `Lat: ${payload.lat.toFixed(5)}\nLng: ${payload.lng.toFixed(5)}`;
+
+          if (socket) socket.emit('gps-update', payload);
+
+          btn.innerText = "Stop Telemetry Stream";
+          btn.style.background = "#ef4444";
+          status.innerHTML = `<span style="color:#4ade80;">● Transmitting live GPS</span>`;
+          dataBox.innerText = `Unit: ${payload.id}\nLat: ${payload.lat.toFixed(5)}\nLng: ${payload.lng.toFixed(5)}`;
         },
         (err) => {
-          document.getElementById('status').innerText = "GPS Error: " + err.message;
-          document.getElementById('status').style.color = "#ef4444";
+          status.innerText = "GPS Error: " + err.message;
+          status.style.color = "#ef4444";
         },
-        { enableHighAccuracy: true, maximumAge: 1000 }
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
       );
     }
   </script>

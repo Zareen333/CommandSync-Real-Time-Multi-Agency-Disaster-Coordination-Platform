@@ -3,45 +3,140 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CommandSync | Tactical EOC</title>
+  <title>CommandSync | Multi-Agency EOC Command</title>
   
+  <!-- Leaflet & Socket.io CDN -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    body { display: flex; height: 100vh; background: #0b1120; color: #fff; overflow: hidden; }
-    #sidebar { width: 340px; background: #0f172a; border-right: 1px solid #1e293b; padding: 20px; display: flex; flex-direction: column; gap: 12px; z-index: 2000; }
-    #map { flex: 1; height: 100%; z-index: 1; cursor: crosshair; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 13px; }
-    .btn-sos { background: #ef4444; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; margin-top: 8px; }
-    .btn-sos:active { background: #b91c1c; }
-    .custom-pin { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; border: 2px solid white; font-size: 11px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #0b1120; color: #f8fafc; overflow: hidden; }
+    
+    #sidebar {
+      width: 360px;
+      background-color: #0f172a;
+      border-right: 1px solid #1e293b;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    h1 { font-size: 18px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; }
+    p.subtitle { font-size: 11px; color: #94a3b8; margin-top: -2px; }
+    
+    .badge-live { 
+      background: rgba(34, 197, 94, 0.15); 
+      color: #4ade80; 
+      border: 1px solid #22c55e; 
+      padding: 2px 6px; 
+      font-size: 10px; 
+      border-radius: 4px; 
+      font-weight: bold; 
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12.5px;
+    }
+
+    .card-title { font-weight: bold; margin-bottom: 6px; color: #e2e8f0; display: flex; justify-content: space-between; }
+    
+    .agency-tag { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 9.5px; font-weight: bold; margin-right: 4px; }
+    .tag-ndrf { background: rgba(249, 115, 22, 0.2); color: #f97316; border: 1px solid #f97316; }
+    .tag-pol { background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid #3b82f6; }
+    .tag-med { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; }
+
+    .btn-action {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: 0.2s;
+    }
+    .btn-action:hover { background: #1d4ed8; }
+    .btn-sos { background: #ef4444; }
+    .btn-sos:hover { background: #dc2626; }
+
+    .custom-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 10px;
+      font-weight: 800;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.7);
+    }
+
+    #map { flex: 1; height: 100%; cursor: crosshair; }
+    .range-slider { width: 100%; margin-top: 6px; accent-color: #ef4444; cursor: pointer; }
   </style>
 </head>
 <body>
 
   <div id="sidebar">
-    <h2>CommandSync <span style="font-size:11px; color:#4ade80; border:1px solid #22c55e; padding:2px 6px; border-radius:4px;">● LIVE</span></h2>
-    
-    <div class="card">
-      <strong>📡 Responder Telemetry:</strong>
-      <div id="unit-status" style="color:#94a3b8; margin-top:4px;">Waiting for field unit...</div>
-      <div id="unit-coords" style="font-family:monospace; color:#38bdf8; margin-top:2px; font-size:11px;"></div>
+    <div>
+      <h1>CommandSync <span class="badge-live">● LIVE EOC</span></h1>
+      <p class="subtitle">Multi-Agency Incident Command System</p>
     </div>
 
+    <!-- Active Multi-Agency Fleets -->
     <div class="card">
-      <strong>🚨 Active Incident:</strong>
-      <div id="sos-title" style="color:#ef4444; font-weight:bold; margin-top:4px;">No Active SOS</div>
-      <div id="sos-sub" style="font-size:11px; color:#64748b; margin-top:2px;">Click map OR tap button below:</div>
-      <button class="btn-sos" onclick="forceSosAlert()">🚨 TRIGGER SOS NOW</button>
+      <div class="card-title">🚨 Active Response Fleets</div>
+      <div style="margin-top: 4px;">
+        <span class="agency-tag tag-ndrf">NDRF</span> NDRF Rescue Boat #12
+        <span id="ndrf-status" style="color:#4ade80; float:right;">Enroute</span>
+      </div>
+      <div style="margin-top: 6px;">
+        <span class="agency-tag tag-pol">POLICE</span> Rapid Patrol Unit 04
+        <span style="color:#38bdf8; float:right;">Patrolling</span>
+      </div>
+      <div style="margin-top: 6px;">
+        <span class="agency-tag tag-med">MED</span> ICU Ambulance Med-01
+        <span style="color:#94a3b8; float:right;">Standby (4 Beds)</span>
+      </div>
     </div>
 
+    <!-- Active Distress Card -->
     <div class="card">
-      <strong>⚡ Debug Log:</strong>
-      <div id="debug-log" style="font-family:monospace; font-size:11px; color:#38bdf8; max-height:100px; overflow-y:auto; margin-top:4px;">
-        System ready.
+      <div class="card-title">⚠️ Active Distress Incident</div>
+      <div id="sos-title" style="color:#94a3b8; font-weight:bold;">No Active SOS Signal</div>
+      <div id="sos-sub" style="font-size:11px; color:#64748b; margin-top:2px;">Click anywhere on map or tap below:</div>
+      <button class="btn-action btn-sos" onclick="triggerManualSos()">TRIGGER SOS DISTRESS</button>
+    </div>
+
+    <!-- Dynamic Flood Severity Engine -->
+    <div class="card">
+      <div class="card-title">🌊 Dynamic Flood Severity Engine</div>
+      <p style="font-size:11px; color:#cbd5e1;">Simulate live water-level expansion to force path recalculation:</p>
+      <input type="range" min="1" max="3" value="1" class="range-slider" id="floodSlider" oninput="adjustFloodLevel(this.value, true)">
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:2px;">
+        <span>Normal (3.5ft)</span>
+        <span>Moderate (5.0ft)</span>
+        <span>Critical (7.2ft)</span>
+      </div>
+    </div>
+
+    <!-- Stage Simulation Control -->
+    <div class="card">
+      <div class="card-title">⚡ Stage Demo Controls</div>
+      <button class="btn-action" id="simBtn" onclick="toggleSimulatedMovement()">► Start NDRF Live Movement</button>
+      <div id="log-feed" style="font-family:monospace; font-size:10px; color:#38bdf8; margin-top:6px; max-height:60px; overflow-y:auto; background:#0b1120; padding:6px; border-radius:4px;">
+        > System initialized. EOC ready.
       </div>
     </div>
   </div>
@@ -49,107 +144,169 @@
   <div id="map"></div>
 
   <script>
+    const socket = typeof io !== 'undefined' ? io() : null;
+
     function printLog(msg) {
-      const el = document.getElementById('debug-log');
-      el.innerHTML = `> ${msg}<br>` + el.innerHTML;
+      const feed = document.getElementById('log-feed');
+      feed.innerHTML = `> ${msg}<br>` + feed.innerHTML;
     }
 
-    // Connect Socket.io safely
-    let socket = null;
-    try {
-      socket = io();
-      printLog("Connected to WebSocket gateway.");
-    } catch(e) {
-      printLog("WebSocket offline (local mode).");
-    }
-
-    // Initialize Leaflet Map with tap lock disabled
+    // 1. Initialize Map
     const map = L.map('map', { tap: false }).setView([19.0782, 73.0915], 15);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-    function makeIcon(color, text) {
+    function createPin(color, label) {
       return L.divIcon({
-        className: 'custom-pin',
-        html: `<div style="background:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${text}</div>`,
+        className: 'custom-icon',
+        html: `<div style="background:${color}; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">${label}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
       });
     }
 
-    // Define Flood Polygon
-    const floodZone = L.polygon([
+    // 2. Static Multi-Agency Unit Pins
+    L.marker([19.0710, 73.0850], { icon: createPin('#3b82f6', 'POL') }).addTo(map).bindPopup('<b>Police Patrol Unit 04</b>');
+    L.marker([19.0680, 73.1020], { icon: createPin('#22c55e', 'AMB') }).addTo(map).bindPopup('<b>Trauma Ambulance Med-01</b><br>4 Beds Ready');
+
+    // 3. Dynamic Hazard Polygon Base Coordinates
+    let baseFloodCoords = [
       [19.0790, 73.0940],
       [19.0840, 73.0980],
       [19.0800, 73.1010],
       [19.0750, 73.0960]
-    ], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.45 }).addTo(map);
+    ];
+    let floodZone = L.polygon(baseFloodCoords, { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.45 }).addTo(map);
+    map.fitBounds(floodZone.getBounds().pad(0.3));
 
     let responderMarker = null;
     let sosMarker = null;
-    let sosCoords = null;
-    let detourLine = null;
+    let currentSosCoords = null;
+    let pathLine = null;
+    let currentWaypoint = [19.0740, 73.0990];
 
-    // Core function to draw SOS pin and route
-    function createSos(lat, lng, id) {
-      sosCoords = [lat, lng];
-
+    // 4. Create & Render SOS Distress
+    function renderSos(lat, lng, sosId) {
+      currentSosCoords = [lat, lng];
       if (sosMarker) map.removeLayer(sosMarker);
 
-      sosMarker = L.marker(sosCoords, { icon: makeIcon('#ef4444', 'SOS') })
+      sosMarker = L.marker(currentSosCoords, { icon: createPin('#ef4444', 'SOS') })
         .addTo(map)
-        .bindPopup(`<b>${id}</b><br>Citizens Trapped!`)
+        .bindPopup(`<b>${sosId}</b><br>Citizens Trapped!`)
         .openPopup();
 
-      document.getElementById('sos-title').innerText = `${id} ACTIVE`;
-      document.getElementById('sos-sub').innerText = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+      document.getElementById('sos-title').innerText = `${sosId} ACTIVE`;
+      document.getElementById('sos-sub').innerText = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Detour Calculated)`;
+      printLog(`Alert ${sosId} registered.`);
+      recalculateRoute();
+    }
 
-      printLog(`SOS placed at [${lat.toFixed(3)}, ${lng.toFixed(3)}]`);
-
-      // Redraw path if responder exists
-      if (responderMarker) {
-        const p = responderMarker.getLatLng();
-        if (detourLine) map.removeLayer(detourLine);
-        detourLine = L.polyline([[p.lat, p.lng], [19.0740, 73.0990], sosCoords], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
+    function recalculateRoute() {
+      if (responderMarker && currentSosCoords) {
+        const pos = responderMarker.getLatLng();
+        if (pathLine) map.removeLayer(pathLine);
+        pathLine = L.polyline([
+          [pos.lat, pos.lng],
+          currentWaypoint,
+          currentSosCoords
+        ], { color: '#38bdf8', weight: 4, dashArray: '6, 8' }).addTo(map);
       }
     }
 
-    // Trigger SOS from click
-    function onMapClick(e) {
+    // 5. Dynamic Hazard Expander Engine
+    function adjustFloodLevel(level, emitSocket = false) {
+      const scale = parseFloat(level);
+      printLog(`Flood Warning: Scale Level ${scale}`);
+
+      const expandedCoords = [
+        [19.0790 + (scale * 0.0010), 73.0940 - (scale * 0.0010)],
+        [19.0840 + (scale * 0.0020), 73.0980 + (scale * 0.0010)],
+        [19.0800 - (scale * 0.0010), 73.1010 + (scale * 0.0020)],
+        [19.0750 - (scale * 0.0020), 73.0960 - (scale * 0.0010)]
+      ];
+
+      map.removeLayer(floodZone);
+      floodZone = L.polygon(expandedCoords, { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.55 }).addTo(map);
+
+      // Shift detour waypoint outward to bypass expanding water
+      currentWaypoint = [19.0740 - (scale * 0.0020), 73.0990 + (scale * 0.0015)];
+      recalculateRoute();
+
+      if (emitSocket && socket) {
+        socket.emit('update-hazard-level', { level: scale });
+      }
+    }
+
+    function handleMapClick(e) {
       const sosId = 'SOS #' + Math.floor(100 + Math.random() * 900);
-      createSos(e.latlng.lat, e.latlng.lng, sosId);
+      renderSos(e.latlng.lat, e.latlng.lng, sosId);
       if (socket) socket.emit('send-sos', { lat: e.latlng.lat, lng: e.latlng.lng, id: sosId });
     }
 
-    map.on('click', onMapClick);
-    floodZone.on('click', onMapClick);
+    map.on('click', handleMapClick);
+    floodZone.on('click', handleMapClick);
 
-    // Button Fallback
-    function forceSosAlert() {
+    function triggerManualSos() {
       const center = map.getCenter();
       const sosId = 'SOS #' + Math.floor(100 + Math.random() * 900);
-      createSos(center.lat, center.lng, sosId);
+      renderSos(center.lat, center.lng, sosId);
       if (socket) socket.emit('send-sos', { lat: center.lat, lng: center.lng, id: sosId });
     }
 
-    // Network Listeners
+    // 6. Stage Demo Simulation
+    let simInterval = null;
+    let simStep = 0;
+    const simPath = [
+      [19.0720, 73.0880],
+      [19.0735, 73.0920],
+      [19.0740, 73.0960],
+      [19.0740, 73.0990],
+      [19.0780, 73.1000],
+      [19.0820, 73.1010]
+    ];
+
+    function toggleSimulatedMovement() {
+      const btn = document.getElementById('simBtn');
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        btn.innerText = "► Start NDRF Live Movement";
+        btn.style.background = "#2563eb";
+        printLog("Simulation paused.");
+      } else {
+        btn.innerText = "⏸ Pause Movement";
+        btn.style.background = "#d97706";
+        printLog("NDRF movement simulation active.");
+        simInterval = setInterval(() => {
+          if (simStep < simPath.length) {
+            const pos = simPath[simStep];
+            const payload = { id: 'NDRF-Unit-12', lat: pos[0], lng: pos[1] };
+            updateResponderPosition(payload);
+            if (socket) socket.emit('gps-update', payload);
+            simStep++;
+          } else {
+            simStep = 0;
+          }
+        }, 1200);
+      }
+    }
+
+    function updateResponderPosition(data) {
+      const pos = [data.lat, data.lng];
+      if (!responderMarker) {
+        responderMarker = L.marker(pos, { icon: createPin('#f97316', 'NDRF') }).addTo(map).bindPopup(`<b>${data.id}</b>`);
+      } else {
+        responderMarker.setLatLng(pos);
+      }
+      recalculateRoute();
+    }
+
+    // 7. Socket Event Listeners
     if (socket) {
-      socket.on('sos-broadcast', data => createSos(data.lat, data.lng, data.id));
-
-      socket.on('telemetry-broadcast', data => {
-        document.getElementById('unit-status').innerHTML = `<span style="color:#4ade80;">● ${data.id} Active</span>`;
-        document.getElementById('unit-coords').innerText = `Lat: ${data.lat.toFixed(5)}, Lng: ${data.lng.toFixed(5)}`;
-        const pos = [data.lat, data.lng];
-
-        if (!responderMarker) {
-          responderMarker = L.marker(pos, { icon: makeIcon('#f97316', 'NDRF') }).addTo(map);
-        } else {
-          responderMarker.setLatLng(pos);
-        }
-
-        if (sosCoords) {
-          if (detourLine) map.removeLayer(detourLine);
-          detourLine = L.polyline([pos, [19.0740, 73.0990], sosCoords], { color: '#38bdf8', weight: 4, dashArray: '5, 8' }).addTo(map);
-        }
+      socket.on('sos-broadcast', data => renderSos(data.lat, data.lng, data.id));
+      socket.on('telemetry-broadcast', data => updateResponderPosition(data));
+      socket.on('hazard-level-changed', data => {
+        document.getElementById('floodSlider').value = data.level;
+        adjustFloodLevel(data.level, false);
       });
     }
   </script>
