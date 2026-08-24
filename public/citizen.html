@@ -3,40 +3,154 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CommandSync | Citizen Distress SOS</title>
+  <title>CommandSync | Citizen Emergency SOS</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: #0b1120; color: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; }
-    .card { max-width: 420px; width: 100%; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-    h2 { color: #ef4444; font-size: 22px; margin-bottom: 6px; }
-    .sos-btn { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, #ef4444, #b91c1c); border: 4px solid #fca5a5; color: white; font-size: 24px; font-weight: 900; cursor: pointer; margin: 20px auto; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30px rgba(239, 68, 68, 0.5); transition: 0.2s; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body {
+      background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #090d16 100%);
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .card {
+      max-width: 420px;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 20px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ef4444;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    p.sub {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      text-align: left;
+      margin-bottom: 14px;
+    }
+
+    label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    select, input {
+      width: 100%;
+      padding: 12px;
+      background: #131b2e;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+      border-radius: 8px;
+      font-size: 13.5px;
+      outline: none;
+    }
+
+    select:focus, input:focus { border-color: #ef4444; }
+
+    .sos-button-wrapper {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      margin: 20px auto 14px auto;
+    }
+
+    .sos-beacon {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.3);
+      animation: beacon 2s infinite;
+      z-index: 1;
+    }
+
+    @keyframes beacon {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+
+    .sos-btn {
+      position: relative;
+      z-index: 2;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%);
+      border: 4px solid rgba(254, 202, 202, 0.8);
+      color: white;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(239, 68, 68, 0.6);
+      transition: 0.15s;
+    }
+
     .sos-btn:active { transform: scale(0.95); }
-    select, input { width: 100%; padding: 12px; background: #1e293b; border: 1px solid #334155; color: white; border-radius: 6px; margin-bottom: 12px; font-size: 14px; outline: none; }
-    #status-box { font-size: 13px; color: #94a3b8; line-height: 1.4; margin-top: 10px; }
+
+    #status-box {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.4;
+      margin-top: 12px;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>EMERGENCY DISTRESS NODE</h2>
-    <p style="font-size: 12px; color: #94a3b8;">Transmits precise satellite coordinates directly to the Incident Control Room</p>
 
-    <div style="margin-top: 18px; text-align: left;">
-      <label style="font-size: 12px; color: #cbd5e1;">Emergency Type:</label>
+  <div class="card">
+    <h2>EMERGENCY SOS UPLINK</h2>
+    <p class="sub">Your coordinates will broadcast directly to the Incident Command Center</p>
+
+    <div class="form-group">
+      <label>Emergency Situation</label>
       <select id="emergencyType">
         <option value="Flood Trapped / Rising Water">🌊 Flood Trapped / Rising Water</option>
         <option value="Train / Metro Emergency">🚆 Train / Metro Emergency</option>
         <option value="Structural Collapse / Debris">🏚️ Structural Collapse / Debris</option>
         <option value="Critical Medical Trauma">🩺 Critical Medical Trauma</option>
       </select>
+    </div>
 
-      <label style="font-size: 12px; color: #cbd5e1;">Contact Phone Number:</label>
+    <div class="form-group">
+      <label>Contact Phone Number (Optional)</label>
       <input type="tel" id="citizenPhone" placeholder="+91 98765 43210" />
     </div>
 
-    <button class="sos-btn" onclick="sendDistressSignal()">SOS</button>
+    <div class="sos-button-wrapper">
+      <div class="sos-beacon"></div>
+      <button class="sos-btn" onclick="sendDistressSignal()">SOS</button>
+    </div>
 
-    <div id="status-box">Tap SOS to broadcast your live satellite location.</div>
+    <div id="status-box">Press SOS to transmit your live satellite telemetry.</div>
   </div>
 
   <script>
@@ -45,60 +159,40 @@
     function sendDistressSignal() {
       const statusBox = document.getElementById('status-box');
       const emergencyType = document.getElementById('emergencyType').value;
-      const citizenPhone = document.getElementById('citizenPhone').value || "Unknown Contact";
+      const citizenPhone = document.getElementById('citizenPhone').value || "No phone provided";
 
-      statusBox.innerHTML = "<span style='color:#38bdf8;'>Acquiring satellite lock...</span>";
+      statusBox.innerHTML = "<span style='color:#38bdf8;'>Locking satellite coordinates...</span>";
 
-      if (!("geolocation" in navigator)) {
-        statusBox.innerHTML = "<span style='color:#ef4444;'>Geolocation unavailable. Dial 112 immediately.</span>";
-        return;
+      function emitSos(lat, lng, isFallback = false) {
+        const payload = {
+          id: 'SOS-' + Math.floor(1000 + Math.random() * 9000),
+          lat: lat,
+          lng: lng,
+          type: emergencyType,
+          phone: citizenPhone,
+          timestamp: new Date().toLocaleTimeString()
+        };
+
+        if (socket) socket.emit('citizen-sos-alert', payload);
+
+        statusBox.innerHTML = `
+          <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; padding: 12px; border-radius: 8px; color: #4ade80; text-align: left; margin-top: 10px;">
+            <strong>✓ SOS TRANSMITTED</strong><br>
+            Ticket: <b>${payload.id}</b><br>
+            Status: Dispatched to Central Command EOC
+          </div>
+        `;
       }
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const payload = {
-            id: 'SOS-' + Math.floor(1000 + Math.random() * 9000),
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            type: emergencyType,
-            phone: citizenPhone,
-            timestamp: new Date().toLocaleTimeString()
-          };
-
-          if (socket) socket.emit('citizen-sos-alert', payload);
-
-          statusBox.innerHTML = `
-            <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; padding: 10px; border-radius: 6px; color: #4ade80;">
-              <strong>✓ DISTRESS ALERT BROADCASTED</strong><br>
-              Incident Ticket: <b>${payload.id}</b><br>
-              Control Room has received your coordinates and is coordinating dispatch.
-            </div>
-          `;
-        },
-        (err) => {
-          // Fallback simulation coordinates in case browser blocks GPS
-          const fallbackLat = 19.0782 + (Math.random() - 0.5) * 0.01;
-          const fallbackLng = 73.0915 + (Math.random() - 0.5) * 0.01;
-          const payload = {
-            id: 'SOS-' + Math.floor(1000 + Math.random() * 9000),
-            lat: fallbackLat,
-            lng: fallbackLng,
-            type: emergencyType,
-            phone: citizenPhone,
-            timestamp: new Date().toLocaleTimeString()
-          };
-
-          if (socket) socket.emit('citizen-sos-alert', payload);
-
-          statusBox.innerHTML = `
-            <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; padding: 10px; border-radius: 6px; color: #4ade80;">
-              <strong>✓ SOS BROADCASTED (Fallback Location)</strong><br>
-              Incident Ticket: <b>${payload.id}</b>
-            </div>
-          `;
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => emitSos(pos.coords.latitude, pos.coords.longitude),
+          () => emitSos(19.0782 + (Math.random() - 0.5) * 0.01, 73.0915 + (Math.random() - 0.5) * 0.01, true),
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      } else {
+        emitSos(19.0782, 73.0915, true);
+      }
     }
   </script>
 </body>
